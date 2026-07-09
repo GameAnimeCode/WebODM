@@ -99,6 +99,7 @@ class ProjectListItem extends React.Component {
   componentWillUnmount(){
     if (this.deleteProjectRequest) this.deleteProjectRequest.abort();
     if (this.refreshRequest) this.refreshRequest.abort();
+    if (this.checkQueueCompletedOnTabActivation) document.removeEventListener("visibilitychange", this.checkQueueCompletedOnTabActivation);
   }
 
   componentDidUpdate(prevProps, prevState){
@@ -394,6 +395,13 @@ class ProjectListItem extends React.Component {
             this.resetUploadState();
           }
         });
+
+      this.checkQueueCompletedOnTabActivation = () => {
+        if (document.visibilityState === "visible" && this.state.upload.uploading){
+          checkQueueCompleted();
+        }
+      }
+      document.addEventListener("visibilitychange", this.checkQueueCompletedOnTabActivation);
     }
     
     PluginsAPI.Dashboard.triggerAddNewTaskButton({projectId: this.state.data.id, onNewTaskAdded: this.newTaskAdded}, (button) => {
