@@ -103,11 +103,15 @@
     TaskManager.prototype._rowHtml = function(project, task) {
         var perms = project.permissions || [];
         var canDelete = perms.indexOf("delete") !== -1;
-        var canCompact = canDelete && task.status === 40 && !task.compacted;
+        var isCompacted = !!task.compacted;
+        var canCompact = canDelete && task.status === 40 && !isCompacted;
         var st = statusInfo(task);
 
         var actions = "";
-        if (canCompact) {
+        if (isCompacted) {
+            actions += '<button type="button" class="btn btn-xs tm-compacted-state" disabled ' +
+                'title="Compacted"><i class="fa fa-check"></i> Compacted</button>';
+        } else if (canCompact) {
             actions += '<button type="button" class="btn btn-xs btn-default tm-compact" ' +
                 'data-project="' + project.id + '" data-task="' + task.id + '" ' +
                 'title="Compact"><i class="fa fa-database"></i> Compact</button>';
@@ -125,7 +129,6 @@
             '<td class="tm-status-' + st.cls + '">' + escapeHtml(st.label) + '</td>' +
             '<td>' + (task.images_count || 0) + '</td>' +
             '<td>' + formatSize(task.size) + '</td>' +
-            '<td>' + (task.compacted ? '<i class="fa fa-check tm-compacted-yes"></i>' : '') + '</td>' +
             '<td class="tm-actions">' + actions + '</td>' +
             '</tr>';
     };
@@ -150,7 +153,7 @@
         });
 
         if (html === "") {
-            html = '<tr><td colspan="7" class="text-center text-muted">No tasks found.</td></tr>';
+            html = '<tr><td colspan="6" class="text-center text-muted">No tasks found.</td></tr>';
         }
 
         this.$tbody.html(html);

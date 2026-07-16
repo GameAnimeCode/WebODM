@@ -23,7 +23,27 @@
     margin-right: 4px;
 }
 
-.task-manager-plugin .tm-compacted-yes {
+.task-manager-plugin .tm-compact,
+.task-manager-plugin .tm-compacted-state {
+    display: inline-block;
+    width: 110px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: visible;
+}
+
+.task-manager-plugin .tm-compacted-state {
+    background-color: transparent;
+    border: 1px solid transparent;
+    color: #5cb85c;
+    opacity: 0.65;
+    cursor: default;
+    box-shadow: none;
+}
+
+.task-manager-plugin .tm-compacted-state:hover,
+.task-manager-plugin .tm-compacted-state:focus {
+    background-color: transparent;
     color: #5cb85c;
 }
 
