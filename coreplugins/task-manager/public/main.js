@@ -57,13 +57,7 @@
 
         this.$root.find("thead").on("click", ".tm-sortable", function() {
             var field = $(this).data("field");
-            if (self.ordering === field) {
-                self.ordering = "-" + field;
-            } else if (self.ordering === "-" + field) {
-                self.ordering = field;
-            } else {
-                self.ordering = field;
-            }
+            self.ordering = (self.ordering === field) ? "-" + field : field;
             self.page = 1;
             self.load();
         });
@@ -217,15 +211,19 @@
     TaskManager.prototype.load = function() {
         var self = this;
 
+        if (this._request) this._request.abort();
+
         this._setLoading(true);
         this.$error.hide();
 
-        $.getJSON("tasks", {page: this.page, ordering: this.ordering}).done(function(res) {
+        this._request = $.getJSON("tasks", {page: this.page, ordering: this.ordering}).done(function(res) {
             self.page = res.page || 1;
             self._render(res);
-            self._setLoading(false);
-        }).fail(function() {
+        }).fail(function(jqXHR) {
+            if (jqXHR.statusText === "abort") return;
             self.$error.text("Unable to retrieve the list of tasks.").show();
+        }).always(function() {
+            self._request = null;
             self._setLoading(false);
         });
     };

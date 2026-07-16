@@ -47,7 +47,7 @@ class Plugin(PluginBase):
 
             viewable_projects = get_objects_for_user(request.user, 'view_project', Project,
                                                       accept_global_perms=False)
-            deletable_project_ids = set(get_objects_for_user(request.user, 'delete_project', Project,
+            deletable_project_ids = set(get_objects_for_user(request.user, 'delete_project', viewable_projects,
                                                                accept_global_perms=False)
                                          .values_list('id', flat=True))
 
