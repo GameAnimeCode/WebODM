@@ -1,0 +1,41 @@
+.task-manager-plugin .tm-toolbar {
+    margin-bottom: 12px;
+}
+
+.task-manager-plugin .tm-total {
+    font-size: 14px;
+}
+
+.task-manager-plugin .tm-loading {
+    padding: 40px 0;
+    color: #888;
+}
+
+.task-manager-plugin table td, .task-manager-plugin table th {
+    vertical-align: middle;
+}
+
+.task-manager-plugin .tm-project-name {
+    font-weight: 600;
+}
+
+.task-manager-plugin .tm-actions button {
+    margin-right: 4px;
+}
+
+.task-manager-plugin .tm-compacted-yes {
+    color: #5cb85c;
+}
+
+.task-manager-plugin .tm-status-FAILED {
+    color: #d9534f;
+}
+
+.task-manager-plugin .tm-status-COMPLETED {
+    color: #5cb85c;
+}
+
+.task-manager-plugin .tm-status-RUNNING,
+.task-manager-plugin .tm-status-QUEUED {
+    color: #f0ad4e;
+}
