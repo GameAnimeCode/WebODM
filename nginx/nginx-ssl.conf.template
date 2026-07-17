@@ -54,6 +54,7 @@ http {
 
     # advertise HTTP/3
     add_header Alt-Svc 'h3=":$WO_PORT"; ma=86400' always;
+    http3_stream_buffer_size 1m;
 
     keepalive_timeout 15;
 
