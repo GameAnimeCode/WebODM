@@ -215,20 +215,34 @@ usage(){
   exit
 }
 
+is_podman(){
+	# Detects whether the active container engine is Podman, whether that's
+	# a native podman/podman-compose install, or a Docker CLI pointed (via
+	# DOCKER_HOST) at a podman socket. Used to pick podman-compatible compose
+	# files/behavior where Docker and Podman aren't drop-in compatible.
+	if command -v docker >/dev/null 2>&1; then
+		docker version 2>/dev/null | grep -qi "Podman Engine" && return 0
+		return 1
+	elif command -v podman >/dev/null 2>&1; then
+		return 0
+	fi
+	return 1
+}
+
 detect_gpus(){
 	# export GPU_AMD=false
 	export GPU_NVIDIA=false
 
 	if [ "${platform}" = "Linux" ]; then
 		set +e
-		if lspci | grep 'NVIDIA'; then
+		if command -v lspci >/dev/null 2>&1 && lspci | grep 'NVIDIA'; then
 			echo "GPU_NVIDIA has been found"
 			export GPU_NVIDIA=true
 			set -e
 			return
 		fi
 
-		if lspci | grep "VGA.*NVIDIA"; then
+		if command -v lspci >/dev/null 2>&1 && lspci | grep "VGA.*NVIDIA"; then
 			echo "GPU_NVIDIA has been found"
 			export GPU_NVIDIA=true
 			set -e
@@ -275,7 +289,13 @@ check_docker_compose(){
 		# Check if compose plugin is installed
 		if ! docker compose > /dev/null 2>&1; then
 
-			if [ "${platform}" = "Linux" ] && [ -z "$1" ] && [ ! -z "$HOME" ]; then
+			# Fall back to podman-compose on Podman hosts that don't have a
+			# docker/compose-plugin shim installed (the auto-install below
+			# assumes a `docker` CLI exists to host the plugin, which isn't
+			# true on a podman-only host).
+			if command -v podman-compose >/dev/null 2>&1; then
+				docker_compose="podman-compose"
+			elif [ "${platform}" = "Linux" ] && [ -z "$1" ] && [ ! -z "$HOME" ]; then
 				echo -e "Checking for docker compose... \033[93mnot found, we'll attempt to install it\033[39m"
 				check_command "curl" "Cannot automatically install docker compose. Please visit https://docs.docker.com/compose/install/" "" "silent"
 				DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
@@ -346,7 +366,13 @@ environment_check(){
         fi
     fi
     
-    check_command "docker" "https://www.docker.com/"
+    if command -v docker >/dev/null 2>&1; then
+        check_command "docker" "https://www.docker.com/"
+    elif command -v podman >/dev/null 2>&1; then
+        echo -e "Checking for docker...  \033[93mnot found, but podman is available, continuing\033[39m"
+    else
+        check_command "docker" "https://www.docker.com/ (or install Podman: https://podman.io/)"
+    fi
     check_docker_compose
 
     if [[ $WO_DEBUG = "YES" ]]; then
@@ -363,7 +389,11 @@ environment_check(){
             fi
 
         fi
-        DOCKER_VERSION=$(docker --version)
+        if command -v docker >/dev/null 2>&1; then
+            DOCKER_VERSION=$(docker --version)
+        elif command -v podman >/dev/null 2>&1; then
+            DOCKER_VERSION=$(podman --version)
+        fi
         # remove stderr in case podman throws complaints, ensure only compose ver is taken
         COMPOSE_VERSION=$($docker_compose version 2> /dev/null | head -n 1)
         echo "Docker version: $DOCKER_VERSION"
@@ -432,7 +462,11 @@ start(){
 
     if [[ $WO_DEFAULT_NODES -gt 0 ]]; then
 		if [ "${GPU_NVIDIA}" = true ]; then
-			command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
+			if is_podman; then
+				command+=" -f docker-compose.nodeodm.gpu.nvidia.podman.yml"
+			else
+				command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
+			fi
 		else
 			command+=" -f docker-compose.nodeodm.yml"
 		fi
@@ -521,7 +555,11 @@ down(){
 	command="$docker_compose -f docker-compose.yml"
 
 	if [ "${GPU_NVIDIA}" = true ]; then
-		command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
+		if is_podman; then
+			command+=" -f docker-compose.nodeodm.gpu.nvidia.podman.yml"
+		else
+			command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
+		fi
 	else
 		command+=" -f docker-compose.nodeodm.yml"
 	fi
@@ -543,7 +581,8 @@ rebuild(){
 run_tests(){
     # If in a container, we run the actual test commands
     # otherwise we launch this command from the container
-    if [[ -f /.dockerenv ]]; then
+    # (/run/.containerenv is Podman's equivalent of Docker's /.dockerenv)
+    if [[ -f /.dockerenv || -f /run/.containerenv ]]; then
         test_type=${1:-"all"}
         shift || true
         
@@ -610,7 +649,11 @@ update(){
 
 	if [[ $WO_DEFAULT_NODES -gt 0 ]]; then
 		if [ "${GPU_NVIDIA}" = true ]; then
-			command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
+			if is_podman; then
+				command+=" -f docker-compose.nodeodm.gpu.nvidia.podman.yml"
+			else
+				command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
+			fi
 		else
 			command+=" -f docker-compose.nodeodm.yml"
 		fi
@@ -634,11 +677,15 @@ elif [[ $1 = "stop" ]]; then
 	command="$docker_compose -f docker-compose.yml"
 
 	if [ "${GPU_NVIDIA}" = true ]; then
-		command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
+		if is_podman; then
+			command+=" -f docker-compose.nodeodm.gpu.nvidia.podman.yml"
+		else
+			command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
+		fi
 	else
 		command+=" -f docker-compose.nodeodm.yml"
 	fi
- 
+
 	command+=" -f docker-compose.nodemicmac.yml stop"
 	run "${command}"
 elif [[ $1 = "restart" ]]; then
