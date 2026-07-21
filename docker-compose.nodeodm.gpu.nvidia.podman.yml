@@ -1,15 +1,16 @@
 # Podman-compatible alternative to docker-compose.nodeodm.gpu.nvidia.yml.
 #
 # The Docker variant requests the GPU via the Compose Spec's
-# `deploy.resources.reservations.devices` block (driver: nvidia), which relies
-# on the nvidia-container-toolkit runtime and isn't understood by Podman's
-# Docker-API compatibility layer. Podman instead exposes GPUs through the
-# Container Device Interface (CDI), referenced here the same way this
-# project's own devcontainer does it (see .devcontainer/devcontainer.json's
+# `deploy.resources.reservations.devices` block (driver: nvidia), which needs
+# the nvidia-container-toolkit runtime and isn't understood by Podman. Podman
+# resolves GPUs through the Container Device Interface (CDI) instead, the same
+# way this project's own devcontainer does it (see .devcontainer/devcontainer.json's
 # `--device nvidia.com/gpu=all`).
 #
-# webodm.sh selects this file instead of docker-compose.nodeodm.gpu.nvidia.yml
-# when it detects the active container engine is Podman.
+# webodm.sh picks this file over docker-compose.nodeodm.gpu.nvidia.yml when
+# podman-compose is the resolved compose backend (see uses_podman_compose()
+# in webodm.sh; CDI resolution needs podman-compose talking to Podman
+# directly, not just any engine running under Podman).
 version: '2.1'
 services:
   webapp:

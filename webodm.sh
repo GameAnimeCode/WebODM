@@ -216,10 +216,10 @@ usage(){
 }
 
 is_podman(){
-	# Detects whether the active container engine is Podman, whether that's
-	# a native podman/podman-compose install, or a Docker CLI pointed (via
-	# DOCKER_HOST) at a podman socket. Used to pick podman-compatible compose
-	# files/behavior where Docker and Podman aren't drop-in compatible.
+	# True whether Podman is a native podman/podman-compose install, or a
+	# Docker CLI pointed (via DOCKER_HOST) at a podman socket. Used for
+	# messaging (environment_check) and the GPU warning below, not for
+	# picking the GPU compose file itself; see uses_podman_compose().
 	if command -v docker >/dev/null 2>&1; then
 		docker version 2>/dev/null | grep -qi "Podman Engine" && return 0
 		return 1
@@ -230,15 +230,13 @@ is_podman(){
 }
 
 uses_podman_compose(){
-	# NVIDIA GPU passthrough needs Podman's CDI device resolution
-	# (nvidia.com/gpu=all), which only happens when podman-compose talks to
-	# Podman directly. Going through the generic Docker-compatible REST API
-	# (docker CLI / docker-compose / docker compose plugin, even when pointed
-	# at a podman socket via DOCKER_HOST) does not resolve CDI device
-	# strings -- and, tested directly, silently starts the GPU node without
-	# any GPU wired in at all rather than erroring. So GPU compose file
-	# selection must key off the actual resolved compose backend, not merely
-	# "is the engine podman" (see is_podman() above, used for other checks).
+	# GPU passthrough needs Podman's CDI device resolution (nvidia.com/gpu=all),
+	# which only happens when podman-compose talks to Podman directly. The
+	# generic Docker-compatible REST API (docker CLI, docker-compose, or the
+	# docker compose plugin, even against a podman socket) doesn't resolve CDI
+	# device strings, and tested directly, it doesn't error either: the GPU
+	# node container starts with no GPU wired in at all. So GPU compose file
+	# selection has to key off the actual resolved backend, not is_podman().
 	[[ "$docker_compose" == "podman-compose" ]]
 }
 
