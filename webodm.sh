@@ -408,7 +408,11 @@ environment_check(){
             DOCKER_VERSION=$(podman --version)
         fi
         # remove stderr in case podman throws complaints, ensure only compose ver is taken
-        COMPOSE_VERSION=$($docker_compose version 2> /dev/null | head -n 1)
+        # (`|| true` guards against SIGPIPE: podman-compose's multi-line
+        # output makes `head -n 1` close the pipe early, and under
+        # `set -o pipefail` that non-zero status would otherwise kill the
+        # whole script over what's just a cosmetic version printout)
+        COMPOSE_VERSION=$($docker_compose version 2> /dev/null | head -n 1) || true
         echo "Docker version: $DOCKER_VERSION"
         echo "Compose version: $COMPOSE_VERSION"
         if [ -z "$DOCKER_HOST" ]; then
