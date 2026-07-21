@@ -229,6 +229,19 @@ is_podman(){
 	return 1
 }
 
+uses_podman_compose(){
+	# NVIDIA GPU passthrough needs Podman's CDI device resolution
+	# (nvidia.com/gpu=all), which only happens when podman-compose talks to
+	# Podman directly. Going through the generic Docker-compatible REST API
+	# (docker CLI / docker-compose / docker compose plugin, even when pointed
+	# at a podman socket via DOCKER_HOST) does not resolve CDI device
+	# strings -- and, tested directly, silently starts the GPU node without
+	# any GPU wired in at all rather than erroring. So GPU compose file
+	# selection must key off the actual resolved compose backend, not merely
+	# "is the engine podman" (see is_podman() above, used for other checks).
+	[[ "$docker_compose" == "podman-compose" ]]
+}
+
 detect_gpus(){
 	# export GPU_AMD=false
 	export GPU_NVIDIA=false
@@ -462,9 +475,12 @@ start(){
 
     if [[ $WO_DEFAULT_NODES -gt 0 ]]; then
 		if [ "${GPU_NVIDIA}" = true ]; then
-			if is_podman; then
+			if uses_podman_compose; then
 				command+=" -f docker-compose.nodeodm.gpu.nvidia.podman.yml"
 			else
+				if is_podman; then
+					echo -e "\033[91mWARNING:\033[39m GPU passthrough for the default node is not reliably supported when accessing Podman through the Docker-compatible API ($docker_compose). The GPU node container may start without any GPU actually wired in. Install podman-compose and re-run for working GPU passthrough, see https://docs.webodm.org/tutorials/using-podman/ for more information.\033[39m"
+				fi
 				command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
 			fi
 		else
@@ -555,7 +571,7 @@ down(){
 	command="$docker_compose -f docker-compose.yml"
 
 	if [ "${GPU_NVIDIA}" = true ]; then
-		if is_podman; then
+		if uses_podman_compose; then
 			command+=" -f docker-compose.nodeodm.gpu.nvidia.podman.yml"
 		else
 			command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
@@ -649,7 +665,7 @@ update(){
 
 	if [[ $WO_DEFAULT_NODES -gt 0 ]]; then
 		if [ "${GPU_NVIDIA}" = true ]; then
-			if is_podman; then
+			if uses_podman_compose; then
 				command+=" -f docker-compose.nodeodm.gpu.nvidia.podman.yml"
 			else
 				command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
@@ -677,7 +693,7 @@ elif [[ $1 = "stop" ]]; then
 	command="$docker_compose -f docker-compose.yml"
 
 	if [ "${GPU_NVIDIA}" = true ]; then
-		if is_podman; then
+		if uses_podman_compose; then
 			command+=" -f docker-compose.nodeodm.gpu.nvidia.podman.yml"
 		else
 			command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
