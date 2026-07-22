@@ -1,0 +1,29 @@
+name: Test Podman
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  podman:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
+      name: Checkout
+    - name: Set Swap Space
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 12
+    - name: Install Podman Compose
+      run: pip install podman-compose
+    - name: Build and Test
+      run: |
+        podman-compose -f docker/compose/docker-compose.yml -f docker/compose/docker-compose.build.yml build --build-arg TEST_BUILD=ON
+        podman-compose -f docker/compose/docker-compose.yml -f docker/compose/docker-compose.build.yml up -d
+        sleep 20
+        podman-compose -f docker/compose/docker-compose.yml -f docker/compose/docker-compose.build.yml exec -T webapp /webodm/webodm.sh test

@@ -82,7 +82,7 @@ if [ "$WO_SSL" = "YES" ]; then
 fi
 
 cat app/scripts/unlock_all_tasks.py | python manage.py shell
-./worker.sh scheduler start
+./scripts/worker.sh scheduler start
 
 congrats(){
     (sleep 5; echo

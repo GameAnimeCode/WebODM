@@ -142,13 +142,13 @@ case $key in
     export WO_SETTINGS
     shift # past argument
     shift # past value
-    ;;    
+    ;;
     --worker-memory)
     WO_WORKER_MEMORY="$2"
     export WO_WORKER_MEMORY
     shift # past argument
     shift # past value
-    ;;	
+    ;;
     --worker-cpus)
     WO_WORKER_CPUS="$2"
     export WO_WORKER_CPUS
@@ -173,18 +173,21 @@ if [[ "${WO_DEFAULT_NODES}" -gt 1 ]]; then
 	export WO_DEFAULT_NODES="1"
 fi
 
+# All compose files live here, relative to the repo root ($__dirname above).
+compose_dir="docker/compose"
+
 usage(){
   echo "Usage: $0 <command>"
   echo
-  echo "This program helps to manage the setup/teardown of the docker containers for running WebODM. We recommend that you read the full documentation of docker at https://docs.docker.com if you want to customize your setup."
+  echo "This program helps to manage the setup/teardown of the Podman containers for running WebODM. We recommend that you read the full documentation of Podman at https://docs.podman.io if you want to customize your setup."
   echo
   echo "Command list:"
   echo "	start [options]		Start WebODM"
   echo "	stop			Stop WebODM"
-  echo "	down			Stop and remove WebODM's docker containers"
+  echo "	down			Stop and remove WebODM's containers"
   echo "	update			Update WebODM to the latest release"
   echo "	liveupdate		Update WebODM to the latest release without stopping it"
-  echo "	rebuild			Rebuild all docker containers and perform cleanups"
+  echo "	rebuild			Rebuild all containers and perform cleanups"
   echo "	checkenv		Do an environment check and install missing components"
   echo "	test [frontend|backend] [args]	Run tests (all tests, or just frontend/backend with optional arguments)"
   echo "	resetadminpassword \"<new password>\"	Reset the administrator's password to a new one. WebODM must be running when executing this command and the password must be enclosed in double quotes."
@@ -192,9 +195,9 @@ usage(){
   echo "Options:"
   echo "	--port	<port>	Set the port that WebODM should bind to (default: $DEFAULT_PORT)"
   echo "	--hostname	<hostname>	Set the hostname that WebODM will be accessible from (default: $DEFAULT_HOST)"
-  echo "	--media-dir	<path>	Path where processing results will be stored to (default: $DEFAULT_MEDIA_DIR (docker named volume))"
-  echo "	--db-dir	<path>	Path where the Postgres db data will be stored to (default: $DEFAULT_DB_DIR (docker named volume))"
-  echo "	--node-dir	<path>	Path where temporary files will be stored during processing when using the default node (default: docker container storage)"
+  echo "	--media-dir	<path>	Path where processing results will be stored to (default: $DEFAULT_MEDIA_DIR (podman named volume))"
+  echo "	--db-dir	<path>	Path where the Postgres db data will be stored to (default: $DEFAULT_DB_DIR (podman named volume))"
+  echo "	--node-dir	<path>	Path where temporary files will be stored during processing when using the default node (default: podman container storage)"
   echo "	--default-nodes	Whether to create a processing node attached to WebODM on startup (default: $DEFAULT_NODES)"
   echo "	--with-micmac	Create a NodeMICMAC node attached to WebODM on startup. Experimental! (default: disabled)"
   echo "	--ssl	Enable SSL and automatically request and install a certificate from letsencrypt.org. (default: $DEFAULT_SSL)"
@@ -211,7 +214,7 @@ usage(){
   echo "	--worker-memory	Maximum amount of memory allocated for the worker process (default: unlimited)"
   echo "	--worker-cpus	Maximum number of CPUs allocated for the worker process (default: all)"
   echo "	--ipv6	Enable IPV6"
-  
+
   exit
 }
 
@@ -221,14 +224,14 @@ detect_gpus(){
 
 	if [ "${platform}" = "Linux" ]; then
 		set +e
-		if lspci | grep 'NVIDIA'; then
+		if command -v lspci >/dev/null 2>&1 && lspci | grep 'NVIDIA'; then
 			echo "GPU_NVIDIA has been found"
 			export GPU_NVIDIA=true
 			set -e
 			return
 		fi
 
-		if lspci | grep "VGA.*NVIDIA"; then
+		if command -v lspci >/dev/null 2>&1 && lspci | grep "VGA.*NVIDIA"; then
 			echo "GPU_NVIDIA has been found"
 			export GPU_NVIDIA=true
 			set -e
@@ -265,41 +268,27 @@ if [[ $gpu = true ]]; then
 	detect_gpus
 fi
 
-docker_compose="docker-compose"
-check_docker_compose(){
+compose_cmd="podman-compose"
+check_compose(){
 	dc_msg_ok="\033[92m\033[1m OK\033[0m\033[39m"
 
-	# Check if docker-compose exists
-	hash "docker-compose" 2>/dev/null || not_found=true
-	if [[ $not_found ]]; then
-		# Check if compose plugin is installed
-		if ! docker compose > /dev/null 2>&1; then
-
-			if [ "${platform}" = "Linux" ] && [ -z "$1" ] && [ ! -z "$HOME" ]; then
-				echo -e "Checking for docker compose... \033[93mnot found, we'll attempt to install it\033[39m"
-				check_command "curl" "Cannot automatically install docker compose. Please visit https://docs.docker.com/compose/install/" "" "silent"
-				DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
-				mkdir -p $DOCKER_CONFIG/cli-plugins
-				curl -SL# https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-linux-x86_64 -o $DOCKER_CONFIG/cli-plugins/docker-compose
-				chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
-				check_docker_compose "y"
-			else
-				if [ -z "$1" ]; then
-					echo -e "Checking for docker compose... \033[93mnot found, please visit https://docs.docker.com/compose/install/ to install docker compose\033[39m"
-				else
-					echo -e "\033[93mCannot automatically install docker compose. Please visit https://docs.docker.com/compose/install/\033[39m"
-				fi
-				return 1
-			fi
+	if ! hash "podman-compose" 2>/dev/null; then
+		if [ "${platform}" = "Linux" ] && [ -z "$1" ] && command -v pip3 >/dev/null 2>&1; then
+			echo -e "Checking for podman-compose... \033[93mnot found, we'll attempt to install it\033[39m"
+			run "pip3 install --user podman-compose || sudo pip3 install podman-compose"
+			check_compose "y"
 		else
-			docker_compose="docker compose"
+			if [ -z "$1" ]; then
+				echo -e "Checking for podman-compose... \033[93mnot found, please visit https://github.com/containers/podman-compose#installation to install it\033[39m"
+			else
+				echo -e "\033[93mCannot automatically install podman-compose. Please visit https://github.com/containers/podman-compose#installation\033[39m"
+			fi
+			return 1
 		fi
-	else
-		docker_compose="docker-compose"
 	fi
 
 	if [ -z "$1" ]; then
-		echo -e "Checking for $docker_compose... $dc_msg_ok"
+		echo -e "Checking for $compose_cmd... $dc_msg_ok"
 	fi
 }
 
@@ -334,20 +323,15 @@ check_command(){
 
 environment_check(){
     if [[ $WO_DEBUG = "YES" ]]; then
-        local DOCKER_VERSION
+        local PODMAN_VERSION
         local COMPOSE_VERSION
         local MEDIA_DIR_OWNER
         local DB_DIR_OWNER
         echo "Host environment: $OSTYPE"
-        if [[ "$(groups)" == *"docker"* ]]; then
-            echo "You are in the docker group"
-        else
-            echo "You are not in the docker group"
-        fi
     fi
-    
-    check_command "docker" "https://www.docker.com/"
-    check_docker_compose
+
+    check_command "podman" "https://podman.io/"
+    check_compose
 
     if [[ $WO_DEBUG = "YES" ]]; then
         if [ -d $WO_MEDIA_DIR ]; then
@@ -363,19 +347,15 @@ environment_check(){
             fi
 
         fi
-        DOCKER_VERSION=$(docker --version)
-        # remove stderr in case podman throws complaints, ensure only compose ver is taken
-        COMPOSE_VERSION=$($docker_compose version 2> /dev/null | head -n 1)
-        echo "Docker version: $DOCKER_VERSION"
+        PODMAN_VERSION=$(podman --version)
+        # remove stderr in case podman-compose throws complaints, ensure only compose ver is taken
+        # (`|| true` guards against SIGPIPE: podman-compose's multi-line
+        # output makes `head -n 1` close the pipe early, and under
+        # `set -o pipefail` that non-zero status would otherwise kill the
+        # whole script over what's just a cosmetic version printout)
+        COMPOSE_VERSION=$($compose_cmd version 2> /dev/null | head -n 1) || true
+        echo "Podman version: $PODMAN_VERSION"
         echo "Compose version: $COMPOSE_VERSION"
-        if [ -z "$DOCKER_HOST" ]; then
-            echo "DOCKER_HOST is unset"
-            if [[ "$($docker_compose -v)" != "podman"* ]] && [[ "$DOCKER_VERSION" == "podman"* ]]; then
-                echo "You seem to be using podman with docker-compose instead of podman-compose. The above variable may need to be set, see https://docs.webodm.org/tutorials/using-podman/ for more information."
-            fi
-        else
-            echo "DOCKER_HOST: $DOCKER_HOST"
-        fi
         echo ""
     fi
 }
@@ -428,26 +408,26 @@ start(){
 	echo "Make sure to issue a $0 down if you decide to change the environment."
 	echo ""
 
-	command="$docker_compose -f docker-compose.yml"
+	command="$compose_cmd -f $compose_dir/docker-compose.yml"
 
     if [[ $WO_DEFAULT_NODES -gt 0 ]]; then
 		if [ "${GPU_NVIDIA}" = true ]; then
-			command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
+			command+=" -f $compose_dir/docker-compose.nodeodm.gpu.nvidia.yml"
 		else
-			command+=" -f docker-compose.nodeodm.yml"
+			command+=" -f $compose_dir/docker-compose.nodeodm.yml"
 		fi
 
 		if [ ! -z "$WO_NODE_DIR" ]; then
-			command+=" -f docker-compose.nodeodm.volume.yml"
+			command+=" -f $compose_dir/docker-compose.nodeodm.volume.yml"
 		fi
     fi
 
     if [[ $load_micmac_node = true ]]; then
-        command+=" -f docker-compose.nodemicmac.yml"
+        command+=" -f $compose_dir/docker-compose.nodemicmac.yml"
     fi
 
     if [[ $dev_mode = true ]]; then
-        command+=" -f docker-compose.dev.yml"
+        command+=" -f $compose_dir/docker-compose.dev.yml"
     fi
 
 	if [ "$WO_SSL" = "YES" ]; then
@@ -460,12 +440,12 @@ start(){
 			exit 1
 		fi
 
-		command+=" -f docker-compose.ssl.yml"
+		command+=" -f $compose_dir/docker-compose.ssl.yml"
 
 		method="Lets Encrypt"
 		if [ -n "$WO_SSL_KEY" ] && [ -n "$WO_SSL_CERT" ]; then
 			method="Manual"
-			command+=" -f docker-compose.ssl-manual.yml"
+			command+=" -f $compose_dir/docker-compose.ssl-manual.yml"
 		fi
 
 		if [ "$method" = "Lets Encrypt" ]; then
@@ -493,19 +473,19 @@ start(){
 			echo -e "\033[91mSettings file does not exist: $WO_SETTINGS\033[39m"
 			exit 1
 		fi
-		command+=" -f docker-compose.settings.yml"
+		command+=" -f $compose_dir/docker-compose.settings.yml"
 	fi
 
 	if [ ! -z "$WO_WORKER_MEMORY" ]; then
-		command+=" -f docker-compose.worker-memory.yml"
+		command+=" -f $compose_dir/docker-compose.worker-memory.yml"
 	fi
 
 	if [ ! -z "$WO_WORKER_CPUS" ]; then
-		command+=" -f docker-compose.worker-cpu.yml"
+		command+=" -f $compose_dir/docker-compose.worker-cpu.yml"
 	fi
 
  	if [[ $ipv6 = true ]]; then
-        command+=" -f docker-compose.ipv6.yml"
+        command+=" -f $compose_dir/docker-compose.ipv6.yml"
 	fi
 
 	command="$command up"
@@ -518,35 +498,35 @@ start(){
 }
 
 down(){
-	command="$docker_compose -f docker-compose.yml"
+	command="$compose_cmd -f $compose_dir/docker-compose.yml"
 
 	if [ "${GPU_NVIDIA}" = true ]; then
-		command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
+		command+=" -f $compose_dir/docker-compose.nodeodm.gpu.nvidia.yml"
 	else
-		command+=" -f docker-compose.nodeodm.yml"
+		command+=" -f $compose_dir/docker-compose.nodeodm.yml"
 	fi
 
-	command+=" -f docker-compose.nodemicmac.yml down --remove-orphans"
+	command+=" -f $compose_dir/docker-compose.nodemicmac.yml down --remove-orphans"
 
 	run "${command}"
 }
 
 rebuild(){
-	run "$docker_compose down --remove-orphans"
+	run "$compose_cmd -f $compose_dir/docker-compose.yml down --remove-orphans"
 	run "rm -fr node_modules/ || sudo rm -fr node_modules/"
 	run "rm -fr nodeodm/external/NodeODM || sudo rm -fr nodeodm/external/NodeODM"
-	run "$docker_compose -f docker-compose.yml -f docker-compose.build.yml build --no-cache"
-	#run "docker images --no-trunc -aqf \"dangling=true\" | xargs docker rmi"
+	run "$compose_cmd -f $compose_dir/docker-compose.yml -f $compose_dir/docker-compose.build.yml build --no-cache"
 	echo -e "\033[1mDone!\033[0m You can now start WebODM by running $0 start"
 }
 
 run_tests(){
     # If in a container, we run the actual test commands
     # otherwise we launch this command from the container
-    if [[ -f /.dockerenv ]]; then
+    # (/run/.containerenv is Podman's way of marking a container)
+    if [[ -f /run/.containerenv ]]; then
         test_type=${1:-"all"}
         shift || true
-        
+
         if [[ $test_type = "frontend" || $test_type = "all" ]]; then
             echo -e "\033[1mRunning frontend tests\033[0m"
             run "npm run test $*"
@@ -565,7 +545,7 @@ run_tests(){
 		environment_check
         echo "Running tests in webapp container"
         test_command="/webodm/webodm.sh test $*"
-        run "$docker_compose exec webapp /bin/bash -c \"$test_command\""
+        run "$compose_cmd -f $compose_dir/docker-compose.yml exec webapp /bin/bash -c \"$test_command\""
     fi
 }
 
@@ -573,13 +553,13 @@ resetpassword(){
 	newpass=$1
 
 	if [[ -n "$newpass" ]]; then
-		container_hash=$(docker ps -q --filter "name=webapp")
+		container_hash=$(podman ps -q --filter "name=webapp")
 		if [[ -z "$container_hash" ]]; then
-			echo -e "\033[91mCannot find webapp docker container. Is WebODM running?\033[39m"
+			echo -e "\033[91mCannot find webapp container. Is WebODM running?\033[39m"
 			exit 1
 		fi
 
-		if docker exec "$container_hash" bash -c "echo \"from django.contrib.auth.models import User;from django.contrib.auth.hashers import make_password;u=User.objects.filter(is_superuser=True)[0];u.password=make_password('$newpass');u.save();print('The following user was changed: {}'.format(u.username));\" | python manage.py shell"; then
+		if podman exec "$container_hash" bash -c "echo \"from django.contrib.auth.models import User;from django.contrib.auth.hashers import make_password;u=User.objects.filter(is_superuser=True)[0];u.password=make_password('$newpass');u.save();print('The following user was changed: {}'.format(u.username));\" | python manage.py shell"; then
 			echo -e "\033[1mPassword changed!\033[0m"
 		else
 			echo -e "\033[91mCould not change administrator password. If you need help, please visit https://github.com/WebODM/WebODM/issues/ \033[39m"
@@ -606,18 +586,18 @@ update(){
 		fi
 	fi
 
-	command="$docker_compose -f docker-compose.yml"
+	command="$compose_cmd -f $compose_dir/docker-compose.yml"
 
 	if [[ $WO_DEFAULT_NODES -gt 0 ]]; then
 		if [ "${GPU_NVIDIA}" = true ]; then
-			command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
+			command+=" -f $compose_dir/docker-compose.nodeodm.gpu.nvidia.yml"
 		else
-			command+=" -f docker-compose.nodeodm.yml"
+			command+=" -f $compose_dir/docker-compose.nodeodm.yml"
 		fi
 	fi
 
 	if [[ $load_micmac_node = true ]]; then
-		command+=" -f docker-compose.nodemicmac.yml"
+		command+=" -f $compose_dir/docker-compose.nodemicmac.yml"
 	fi
 
 	command+=" pull"
@@ -631,15 +611,15 @@ elif [[ $1 = "stop" ]]; then
 	environment_check
 	echo "Stopping WebODM..."
 
-	command="$docker_compose -f docker-compose.yml"
+	command="$compose_cmd -f $compose_dir/docker-compose.yml"
 
 	if [ "${GPU_NVIDIA}" = true ]; then
-		command+=" -f docker-compose.nodeodm.gpu.nvidia.yml"
+		command+=" -f $compose_dir/docker-compose.nodeodm.gpu.nvidia.yml"
 	else
-		command+=" -f docker-compose.nodeodm.yml"
+		command+=" -f $compose_dir/docker-compose.nodeodm.yml"
 	fi
- 
-	command+=" -f docker-compose.nodemicmac.yml stop"
+
+	command+=" -f $compose_dir/docker-compose.nodemicmac.yml stop"
 	run "${command}"
 elif [[ $1 = "restart" ]]; then
 	environment_check

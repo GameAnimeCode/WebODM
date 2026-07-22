@@ -17,7 +17,7 @@ services:
   webapp:
     image: webodm/webodm_webapp
     container_name: webapp
-    entrypoint: /bin/bash -c "service cron start && chmod +x /webodm/*.sh && /bin/bash -c \"/webodm/wait-for-postgres.sh db /webodm/wait-for-it.sh -t 0 broker:6379 -- /webodm/start.sh\""
+    entrypoint: /bin/bash -c "service cron start && chmod +x /webodm/*.sh /webodm/scripts/*.sh && /bin/bash -c \"/webodm/scripts/wait-for-postgres.sh db /webodm/scripts/wait-for-it.sh -t 0 broker:6379 -- /webodm/start.sh\""
     volumes:
       - ${WO_MEDIA_DIR}:/webodm/app/media:z
     ports:
@@ -46,7 +46,7 @@ services:
   worker:
     image: webodm/webodm_webapp
     container_name: worker
-    entrypoint: /bin/bash -c "/webodm/wait-for-postgres.sh db /webodm/wait-for-it.sh -t 0 broker:6379 -- /webodm/wait-for-it.sh -t 0 webapp:8000 -- /webodm/worker.sh start"
+    entrypoint: /bin/bash -c "/webodm/scripts/wait-for-postgres.sh db /webodm/scripts/wait-for-it.sh -t 0 broker:6379 -- /webodm/scripts/wait-for-it.sh -t 0 webapp:8000 -- /webodm/scripts/worker.sh start"
     volumes:
       - ${WO_MEDIA_DIR}:/webodm/app/media:z
     depends_on:

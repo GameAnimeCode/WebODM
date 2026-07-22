@@ -1,0 +1,11 @@
+# This configuration builds from Dockerfiles
+# instead of pulling from a registry
+version: '2.1'
+services:
+  db:
+    build:
+      context: ../../db
+  webapp:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile

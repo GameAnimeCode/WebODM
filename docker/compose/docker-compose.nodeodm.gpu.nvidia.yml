@@ -1,0 +1,24 @@
+# Chaining this file to the main compose file adds a GPU-accelerated
+# default processing node instance.
+#
+# GPU access is requested through the Container Device Interface (CDI),
+# the same way this project's own devcontainer does it (see
+# .devcontainer/devcontainer.json's `--device nvidia.com/gpu=all`). This
+# requires the nvidia-container-toolkit to be configured for CDI
+# (`nvidia-ctk cdi generate`) so that `nvidia.com/gpu=all` resolves.
+version: '2.1'
+services:
+  webapp:
+    depends_on:
+      - node-odx-1
+    environment:
+      - WO_DEFAULT_NODES
+  node-odx-1:
+    image: webodm/nodeodx:gpu
+    container_name: node-odx-1
+    expose:
+      - "3000"
+    restart: unless-stopped
+    oom_score_adj: 500
+    devices:
+      - nvidia.com/gpu=all

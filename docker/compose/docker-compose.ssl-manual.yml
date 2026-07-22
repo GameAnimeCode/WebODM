@@ -3,5 +3,5 @@ version: '2.1'
 services:
   webapp:
     volumes:
-      - ${WO_SSL_KEY}:/webodm/nginx/ssl/key.pem
-      - ${WO_SSL_CERT}:/webodm/nginx/ssl/cert.pem
+      - ${WO_SSL_KEY}:/webodm/nginx/ssl/key.pem:Z
+      - ${WO_SSL_CERT}:/webodm/nginx/ssl/cert.pem:Z
