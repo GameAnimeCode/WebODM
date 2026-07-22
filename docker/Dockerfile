@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 FROM ubuntu:22.04 AS common
 LABEL maintainer="Piero Toffanin <pt@masseranolabs.com>"
 
@@ -19,78 +18,54 @@ ENV PROJ_LIB=/usr/share/proj
 # Create and change into working directory
 WORKDIR $WORKDIR
 
-# Allow multi-line runs, break on errors and output commands for debugging.
-# The following does not work in Podman unless you build in Docker
-# compatibility mode: <https://github.com/containers/podman/issues/8477>
-# You can manually prepend every RUN script with `set -ex` too.
-SHELL ["sh", "-exc"]
-
-RUN <<EOT
-    # Common system configuration, should change very infrequently
-    # Set timezone to UTC
-    echo "UTC" > /etc/timezone
-EOT
+# Set timezone to UTC
+RUN echo "UTC" > /etc/timezone
 
 FROM common AS build
 
 # Install Python deps -- install & remove cleanup build-only deps in the process
 COPY requirements.txt ./
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    <<EOT
-    # Build-time dependencies
-    apt-get -qq update
-    apt-get install -y --no-install-recommends curl ca-certificates gnupg cmake g++ libpdal-dev
-    # Python 3.9 support
-    curl -fsSL 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xf23c5a6cf475977595c89f51ba6932366a755776' | gpg --dearmor -o /etc/apt/trusted.gpg.d/deadsnakes.gpg
-    echo "deb http://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu $RELEASE_CODENAME main" > /etc/apt/sources.list.d/deadsnakes.list
-    # Node.js deb source
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nodesource.gpg
-    echo "deb https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
-    # Nginx deb source (official stable)
-    curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nginx.gpg
-    echo "deb https://nginx.org/packages/ubuntu $RELEASE_CODENAME nginx" > /etc/apt/sources.list.d/nginx.list
-    printf "Package: *\nPin: origin nginx.org\nPin: release o=nginx\nPin-Priority: 900\n" > /etc/apt/preferences.d/99nginx
-    # Update package list
-    apt-get update
-    # Install common deps, starting with NodeJS
-    apt-get -qq install -y nodejs
-    # Python3.9, GDAL, PDAL, nginx, letsencrypt, psql
+# Build-time dependencies, repository setup, and the entwine build. Chained
+# into a single RUN (rather than BuildKit heredocs/cache mounts, which
+# buildah's Dockerfile parser doesn't reliably support across versions) so
+# this builds identically under both Docker and Podman.
+# Installs curl/gnupg/build tools, adds the deadsnakes (Python 3.9),
+# NodeSource, and nginx.org apt repos, installs the rest of the build-time
+# packages, then builds entwine from source.
+RUN apt-get -qq update && \
+    apt-get install -y --no-install-recommends curl ca-certificates gnupg cmake g++ libpdal-dev && \
+    curl -fsSL 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xf23c5a6cf475977595c89f51ba6932366a755776' | gpg --dearmor -o /etc/apt/trusted.gpg.d/deadsnakes.gpg && \
+    echo "deb http://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu $RELEASE_CODENAME main" > /etc/apt/sources.list.d/deadsnakes.list && \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nodesource.gpg && \
+    echo "deb https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" > /etc/apt/sources.list.d/nodesource.list && \
+    curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nginx.gpg && \
+    echo "deb https://nginx.org/packages/ubuntu $RELEASE_CODENAME nginx" > /etc/apt/sources.list.d/nginx.list && \
+    printf "Package: *\nPin: origin nginx.org\nPin: release o=nginx\nPin-Priority: 900\n" > /etc/apt/preferences.d/99nginx && \
+    apt-get update && \
+    apt-get -qq install -y nodejs && \
     apt-get install -y --no-install-recommends \
         python$PYTHON_VERSION python$PYTHON_VERSION-venv python$PYTHON_VERSION-distutils python$PYTHON_VERSION-dev libpq-dev build-essential git libproj-dev gdal-bin pdal \
-        libgdal-dev nginx certbot gettext-base cron postgresql-client gettext tzdata
-    # Create virtualenv
-    python$PYTHON_VERSION -m venv $WORKDIR/venv
-    # Build entwine
-    mkdir /staging && cd /staging
-    git clone -b 290 https://github.com/WebODM/entwine && cd entwine
-    mkdir build && cd build && cmake .. -DWITH_TESTS=OFF -DWITH_ZSTD=OFF -DCMAKE_INSTALL_PREFIX=/staging/entwine/build/install && make -j6 && make install
+        libgdal-dev nginx certbot gettext-base cron postgresql-client gettext tzdata && \
+    python$PYTHON_VERSION -m venv $WORKDIR/venv && \
+    mkdir /staging && cd /staging && \
+    git clone -b 290 https://github.com/WebODM/entwine && cd entwine && \
+    mkdir build && cd build && cmake .. -DWITH_TESTS=OFF -DWITH_ZSTD=OFF -DCMAKE_INSTALL_PREFIX=/staging/entwine/build/install && make -j6 && make install && \
     cd /webodm
-EOT
 
 # Modify PATH to prioritize venv, effectively activating venv
 ENV PATH="$WORKDIR/venv/bin:$PATH"
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    <<EOT
-    # Install Python dependencies
-    # Install pip
-    pip install -U pip==26.0.1 setuptools==67.0.0 wheel==0.46.3 cython==3.2.4
-    pip install numpy==1.26.2
-    # Install Python requirements, including correct Python GDAL bindings.
+# Install Python dependencies, including correct Python GDAL bindings
+RUN pip install -U pip==26.0.1 setuptools==67.0.0 wheel==0.46.3 cython==3.2.4 && \
+    pip install numpy==1.26.2 && \
     pip install -r requirements.txt "boto3==1.14.14" gdal[numpy]=="$(gdal-config --version).*" --no-build-isolation
-EOT
 
 # Install project Node dependencies
 COPY package.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    <<EOT
-    npm install --quiet
-    # Install webpack, webpack CLI
-    npm install --quiet -g webpack@5.89.0
+RUN npm install --quiet && \
+    npm install --quiet -g webpack@5.89.0 && \
     npm install --quiet -g webpack-cli@5.1.4
-EOT
 
 # Copy remaining files
 COPY . ./
@@ -98,69 +73,47 @@ COPY . ./
 # Defining this here allows for caching of previous layers.
 ARG TEST_BUILD
 
-RUN <<EOT
-    # Final build steps (in one roll to prevent too many layers).
-    # Setup cron
-    chmod 0644 ./nginx/crontab
-    ln -s ./nginx/crontab /var/spool/cron/crontabs/root
-    # NodeODX setup
-    chmod +x ./nginx/letsencrypt-autogen.sh
-    ./nodeodm/setup.sh
-    ./nodeodm/cleanup.sh
-    # Run webpack build, Django setup and final cleanup
-    webpack --mode production
-    # Django setup
-    python manage.py collectstatic --noinput
-    python manage.py rebuildplugins
-    python manage.py translate build --safe
-    # Install ffmpeg
-    python /webodm/app/scripts/install_ffmpeg.py
-    # Remove stale temp files
-    rm -rf /tmp/* /var/tmp/*
-    # Remove auto-generated secret key (happens on import of settings when none is defined)
+# Final build steps (in one roll to prevent too many layers)
+RUN chmod 0644 ./nginx/crontab && \
+    ln -s ./nginx/crontab /var/spool/cron/crontabs/root && \
+    chmod +x ./nginx/letsencrypt-autogen.sh && \
+    ./nodeodm/setup.sh && \
+    ./nodeodm/cleanup.sh && \
+    webpack --mode production && \
+    python manage.py collectstatic --noinput && \
+    python manage.py rebuildplugins && \
+    python manage.py translate build --safe && \
+    python /webodm/app/scripts/install_ffmpeg.py && \
+    rm -rf /tmp/* /var/tmp/* && \
     rm /webodm/webodm/secret_key.py
-EOT
 
 FROM common AS app
 
 # Modify PATH to prioritize venv, effectively activating venv
 ENV PATH="$WORKDIR/venv/bin:$PATH"
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    --mount=type=cache,target=/root/.npm \
-    <<EOT
-    # Run-time dependencies
-    apt-get -qq update
-    apt-get install -y --no-install-recommends curl ca-certificates gnupg
-    # Legacy Python support
-    curl -fsSL 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xf23c5a6cf475977595c89f51ba6932366a755776' | gpg --dearmor -o /etc/apt/trusted.gpg.d/deadsnakes.gpg
-    echo "deb http://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu $RELEASE_CODENAME main" > /etc/apt/sources.list.d/deadsnakes.list
-    # Node.js deb source
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nodesource.gpg
-    echo "deb https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
-    # Nginx deb source (official stable)
-    curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nginx.gpg
-    echo "deb https://nginx.org/packages/ubuntu $RELEASE_CODENAME nginx" > /etc/apt/sources.list.d/nginx.list
-    printf "Package: *\nPin: origin nginx.org\nPin: release o=nginx\nPin-Priority: 900\n" > /etc/apt/preferences.d/99nginx
-    # Update package list
-    apt-get update
-    # Install common deps, starting with NodeJS
-    apt-get -qq install -y nodejs
-    # Python, GDAL, PDAL, nginx, letsencrypt, psql, git, exiftool
+# Run-time dependencies (incl. legacy Python support, NodeSource and
+# nginx.org apt repos), webpack, then cleanup of build-only apt state.
+RUN apt-get -qq update && \
+    apt-get install -y --no-install-recommends curl ca-certificates gnupg && \
+    curl -fsSL 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xf23c5a6cf475977595c89f51ba6932366a755776' | gpg --dearmor -o /etc/apt/trusted.gpg.d/deadsnakes.gpg && \
+    echo "deb http://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu $RELEASE_CODENAME main" > /etc/apt/sources.list.d/deadsnakes.list && \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nodesource.gpg && \
+    echo "deb https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" > /etc/apt/sources.list.d/nodesource.list && \
+    curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/nginx.gpg && \
+    echo "deb https://nginx.org/packages/ubuntu $RELEASE_CODENAME nginx" > /etc/apt/sources.list.d/nginx.list && \
+    printf "Package: *\nPin: origin nginx.org\nPin: release o=nginx\nPin-Priority: 900\n" > /etc/apt/preferences.d/99nginx && \
+    apt-get update && \
+    apt-get -qq install -y nodejs && \
     apt-get install -y --no-install-recommends \
         python$PYTHON_VERSION python$PYTHON_VERSION-distutils gdal-bin pdal \
-        nginx certbot logrotate gettext-base cron postgresql-client gettext tzdata git exiftool
-    # Install webpack, webpack CLI
-    npm install --quiet -g webpack@5.89.0
-    npm install --quiet -g webpack-cli@5.1.4
-    # Cleanup of build requirements
-    apt-get autoremove -y
-    apt-get clean
-    rm -rf /var/lib/apt/lists/*
-    # Remove stale temp files
+        nginx certbot logrotate gettext-base cron postgresql-client gettext tzdata git exiftool && \
+    npm install --quiet -g webpack@5.89.0 && \
+    npm install --quiet -g webpack-cli@5.1.4 && \
+    apt-get autoremove -y && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
     rm -rf /tmp/* /var/tmp/*
-EOT
 
 COPY --from=build /staging/entwine/build/install/bin/entwine /usr/bin/entwine
 COPY --from=build /staging/entwine/build/install/lib/libentwine* /usr/lib/
