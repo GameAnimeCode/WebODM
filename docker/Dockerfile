@@ -32,6 +32,7 @@ RUN echo "UTC" > /etc/timezone
 
 FROM common AS build
 
+ARG DEBIAN_FRONTEND
 ARG NODE_MAJOR
 ARG PYTHON_VERSION
 ARG RELEASE_CODENAME
@@ -45,7 +46,8 @@ COPY requirements.txt ./
 # packages, then builds entwine from source. Chained into a single RUN
 # (rather than BuildKit heredocs/cache mounts, which buildah's Dockerfile
 # parser doesn't reliably support across versions) for Docker/Podman parity.
-RUN apt-get -qq update && \
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get -qq update && \
     apt-get install -y --no-install-recommends curl ca-certificates gnupg cmake g++ libpdal-dev && \
     curl -fsSL 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xf23c5a6cf475977595c89f51ba6932366a755776' | gpg --dearmor -o /etc/apt/trusted.gpg.d/deadsnakes.gpg && \
     echo "deb http://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu $RELEASE_CODENAME main" > /etc/apt/sources.list.d/deadsnakes.list && \
@@ -101,6 +103,7 @@ RUN chmod 0644 ./nginx/crontab && \
 
 FROM common AS app
 
+ARG DEBIAN_FRONTEND
 ARG NODE_MAJOR
 ARG PYTHON_VERSION
 ARG RELEASE_CODENAME
@@ -111,7 +114,8 @@ ENV PATH="$WORKDIR/venv/bin:$PATH"
 
 # Run-time dependencies (incl. legacy Python support, NodeSource and
 # nginx.org apt repos), webpack, then cleanup of build-only apt state.
-RUN apt-get -qq update && \
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get -qq update && \
     apt-get install -y --no-install-recommends curl ca-certificates gnupg && \
     curl -fsSL 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xf23c5a6cf475977595c89f51ba6932366a755776' | gpg --dearmor -o /etc/apt/trusted.gpg.d/deadsnakes.gpg && \
     echo "deb http://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu $RELEASE_CODENAME main" > /etc/apt/sources.list.d/deadsnakes.list && \
