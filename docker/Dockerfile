@@ -1,12 +1,21 @@
-FROM ubuntu:22.04 AS common
-LABEL maintainer="Piero Toffanin <pt@masseranolabs.com>"
-
-# Build-time variables
+# Build-time variables. Declared here, before the first FROM, so they're in
+# global scope; each stage below re-declares (bare, no value) whichever ones
+# it needs, since ARG values don't otherwise carry across a
+# `FROM <previous-stage> AS ...` transition.
 ARG DEBIAN_FRONTEND=noninteractive
 ARG NODE_MAJOR=20
 ARG PYTHON_VERSION=3.9
 ARG RELEASE_CODENAME=jammy
 ARG WORKDIR=/webodm
+
+FROM ubuntu:22.04 AS common
+LABEL maintainer="Piero Toffanin <pt@masseranolabs.com>"
+
+ARG DEBIAN_FRONTEND
+ARG NODE_MAJOR
+ARG PYTHON_VERSION
+ARG RELEASE_CODENAME
+ARG WORKDIR
 
 # Run-time variables
 ENV PYTHONUNBUFFERED=1
@@ -23,16 +32,19 @@ RUN echo "UTC" > /etc/timezone
 
 FROM common AS build
 
+ARG NODE_MAJOR
+ARG PYTHON_VERSION
+ARG RELEASE_CODENAME
+ARG WORKDIR
+
 # Install Python deps -- install & remove cleanup build-only deps in the process
 COPY requirements.txt ./
 
-# Build-time dependencies, repository setup, and the entwine build. Chained
-# into a single RUN (rather than BuildKit heredocs/cache mounts, which
-# buildah's Dockerfile parser doesn't reliably support across versions) so
-# this builds identically under both Docker and Podman.
 # Installs curl/gnupg/build tools, adds the deadsnakes (Python 3.9),
 # NodeSource, and nginx.org apt repos, installs the rest of the build-time
-# packages, then builds entwine from source.
+# packages, then builds entwine from source. Chained into a single RUN
+# (rather than BuildKit heredocs/cache mounts, which buildah's Dockerfile
+# parser doesn't reliably support across versions) for Docker/Podman parity.
 RUN apt-get -qq update && \
     apt-get install -y --no-install-recommends curl ca-certificates gnupg cmake g++ libpdal-dev && \
     curl -fsSL 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xf23c5a6cf475977595c89f51ba6932366a755776' | gpg --dearmor -o /etc/apt/trusted.gpg.d/deadsnakes.gpg && \
@@ -88,6 +100,11 @@ RUN chmod 0644 ./nginx/crontab && \
     rm /webodm/webodm/secret_key.py
 
 FROM common AS app
+
+ARG NODE_MAJOR
+ARG PYTHON_VERSION
+ARG RELEASE_CODENAME
+ARG WORKDIR
 
 # Modify PATH to prioritize venv, effectively activating venv
 ENV PATH="$WORKDIR/venv/bin:$PATH"
