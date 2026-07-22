@@ -1,6 +1,6 @@
 worker_processes 1;
 
-# Change this if running outside docker!
+# Change this if running outside a container!
 user root root;
 pid /tmp/nginx.pid;
 error_log /dev/null;

@@ -1,6 +1,6 @@
 #!/bin/bash
 __dirname=$(cd $(dirname "$0"); pwd -P)
-cd ${__dirname}
+cd "$(dirname "${__dirname}")"
 
 usage(){
   echo "Usage: $0 <command>"
