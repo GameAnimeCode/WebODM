@@ -78,8 +78,7 @@ RUN pip install -U pip==26.0.1 setuptools==67.0.0 wheel==0.46.3 cython==3.2.4 &&
 # Install project Node dependencies
 COPY package.json ./
 RUN npm install --quiet && \
-    npm install --quiet -g webpack@5.89.0 && \
-    npm install --quiet -g webpack-cli@5.1.4
+    npm install --quiet -g webpack@5.89.0 webpack-cli@5.1.4
 
 # Copy remaining files
 COPY . ./
@@ -129,8 +128,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get install -y --no-install-recommends \
         python$PYTHON_VERSION python$PYTHON_VERSION-distutils gdal-bin pdal \
         nginx certbot logrotate gettext-base cron postgresql-client gettext tzdata git exiftool && \
-    npm install --quiet -g webpack@5.89.0 && \
-    npm install --quiet -g webpack-cli@5.1.4 && \
+    npm install --quiet -g webpack@5.89.0 webpack-cli@5.1.4 && \
     apt-get autoremove -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
