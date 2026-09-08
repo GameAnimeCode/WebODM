@@ -129,6 +129,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
         python$PYTHON_VERSION python$PYTHON_VERSION-distutils gdal-bin pdal \
         nginx certbot logrotate gettext-base cron postgresql-client gettext tzdata git exiftool && \
     npm install --quiet -g webpack@5.89.0 webpack-cli@5.1.4 && \
+    curl -fsSL "https://github.com/uav4geo/Splat-Tools/releases/download/v1.0.3/splat-tools-1.0.3-$(uname -m)-linux.tar.gz" | tar -xz -C /usr/bin --strip-components=1 "splat-tools-1.0.3-$(uname -m)-linux/splat-tools" && /usr/bin/splat-tools --version && \
     apt-get autoremove -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \

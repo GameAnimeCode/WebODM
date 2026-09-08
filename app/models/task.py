@@ -11,7 +11,6 @@ from zipstream.ng import ZipStream
 
 import json
 import redis
-from shlex import quote
 from concurrent.futures import ThreadPoolExecutor
 import threading
 
@@ -128,7 +127,7 @@ def resize_image(image_path, resize_to, done=None):
             xmp = im.info.get("xmp")
             exif = im.info.get("exif")
 
-            resized = im.resize((resized_width, resized_height), Image.LANCZOS)
+            resized = im.resize((resized_width, resized_height), Image.LANCZOS, reducing_gap=2)
             params = {}
             if is_jpeg:
                 params['quality'] = 100
@@ -220,6 +219,7 @@ class Task(models.Model):
             'shots.geojson': os.path.join('odm_report', 'shots.geojson'),
             'report.pdf': os.path.join('odm_report', 'report.pdf'),
             'ground_control_points.geojson': os.path.join('odm_georeferencing', 'ground_control_points.geojson'),
+            'splats.rad': os.path.join('splats', 'model.rad'),
     }
 
     STATUS_CODES = (
@@ -1117,9 +1117,9 @@ class Task(models.Model):
 
             tmp_ept_path = tempfile.mkdtemp('_ept', dir=settings.MEDIA_TMP)
             params = [entwine, "build", "--threads", str(threads), 
-                "--tmp", quote(tmp_ept_path),
-                "-i", quote(point_cloud),
-                "-o", quote(ept_dir)]
+                "--tmp", tmp_ept_path,
+                "-i", point_cloud,
+                "-o", ept_dir]
             
             subprocess.run(params, timeout=12*60*60)
 
@@ -1761,8 +1761,8 @@ class Task(models.Model):
             output_glb_tmp = output_glb + ".tmp.glb"
 
             params = ["node", glbopti_path,
-                            "--input", quote(input_glb), 
-                            "--output", quote(output_glb_tmp),
+                            "--input", input_glb,
+                            "--output", output_glb_tmp,
                             "--texture-rescale", str(rescale)]
             if settings.TESTING:
                 params += ["--test"]
