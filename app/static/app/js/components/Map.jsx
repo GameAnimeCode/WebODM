@@ -327,15 +327,23 @@ class Map extends React.Component {
                     if (type === 'plant'){
                       // percentile
                       for (let b in statistics){
-                        min = Math.min(statistics[b]["percentiles"][0]);
-                        max = Math.max(statistics[b]["percentiles"][1]);
+                        min = Math.min(min, statistics[b]["percentiles"][0]);
+                        max = Math.max(max, statistics[b]["percentiles"][1]);
                       }
                     }else{
-                      // min/max
-                      for (let b in statistics){
-                        min = Math.min(statistics[b]["min"]);
-                        max = Math.max(statistics[b]["max"]);
+                      let bandsIdx = Object.keys(statistics);
+                      const rgb = ["red", "green", "blue"];
+                      
+                      // Limit search for min/max to RGB channels only (better display)
+                      if (type === 'orthophoto' && this.hasBands(rgb, meta.task.orthophoto_bands)){
+                        bandsIdx = rgb.map(d => String(meta.task.orthophoto_bands.map(ob => (ob.description || "").toLowerCase()).indexOf(d) + 1));
                       }
+
+                      // min/max
+                      bandsIdx.forEach(b => {
+                        min = Math.min(min, statistics[b]["min"]);
+                        max = Math.max(max, statistics[b]["max"]);
+                      });
                     }
                     params.rescale = encodeURIComponent(`${min},${max}`);              
                 }else{
