@@ -207,7 +207,7 @@ def export_raster(input, output, progress_callback=None, **opts):
             band_count = src.count
 
         if bigtiff:
-            profile.update(BIGTIFF='IF_SAFER')
+            profile.update(BIGTIFF='IF_SAFER', BLOCKXSIZE=window_size, BLOCKYSIZE=window_size, TILED='YES')
 
         if reproject:
             path_base, _ = os.path.splitext(output_raster)
