@@ -29,4 +29,4 @@ See [Trademark Guidelines](https://github.com/WebODM/WebODM/blob/master/TRADEMAR
 
  * WebODM is [not affiliated with OpenDroneMap](https://webodm.org/blog/announcement/) and is not a user interface to OpenDroneMap
  * For processing, WebODM uses [ODX](https://github.com/WebODM/ODX), not ODM
- * Official, up-to-date WebODM installers [are free](https://webodm.org/download) to download and make installation a breeze. If you paid for an installer after April 2026, you bought a different software
+ * Official, up-to-date WebODM installers [are free](https://webodm.org/download) to download and make installation a breeze. If you paid for an installer after April 2026, you bought a different software. See how to [migrate from a purchased installer](https://docs.webodm.org/tutorials/opendronemap-migration-guide/#webodm).
